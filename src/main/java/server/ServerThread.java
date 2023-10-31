@@ -18,9 +18,13 @@ public class ServerThread implements Runnable{
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
+    private final DiscoveryMechanism discoveryMechanism;
+
+
 
     public ServerThread(Socket socket){
         this.socket = socket;
+        this.discoveryMechanism = DiscoveryMechanism.getInstance();
 
         try {
             in = new BufferedReader(
@@ -47,6 +51,13 @@ public class ServerThread implements Runnable{
                 return;
             }
 
+            //* Get All Available Routes And Check If The Requested Route is present
+            for(HTTPRoute httpRoute : this.discoveryMechanism.getMapOfControllerRoutes()){
+                if(httpRoute.getRoute().equals(request.getLocation()) && httpRoute.getHttpMethod().equals(request.getMethod().toString())) {
+                    String controllerClassName = httpRoute.getController().getName();
+                    break;
+                }
+            }
 
             // Response example
             Map<String, Object> responseMap = new HashMap<>();
