@@ -1,5 +1,6 @@
 package server;
 
+import framework.injection.DIEngine;
 import framework.response.JsonResponse;
 import framework.response.Response;
 import framework.request.enums.Method;
@@ -9,6 +10,7 @@ import framework.request.Request;
 import framework.request.exceptions.RequestNotValidException;
 
 import java.io.*;
+import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,12 +21,12 @@ public class ServerThread implements Runnable{
     private BufferedReader in;
     private PrintWriter out;
     private final DiscoveryMechanism discoveryMechanism;
-
-
+    private final DIEngine diEngine;
 
     public ServerThread(Socket socket){
         this.socket = socket;
-        this.discoveryMechanism = DiscoveryMechanism.getInstance();
+        discoveryMechanism = DiscoveryMechanism.getInstance();
+        diEngine = DIEngine.getInstance();
 
         try {
             in = new BufferedReader(
@@ -51,10 +53,10 @@ public class ServerThread implements Runnable{
                 return;
             }
 
-            //* Get All Available Routes And Check If The Requested Route is present
             for(HTTPRoute httpRoute : this.discoveryMechanism.getMapOfControllerRoutes()){
-                if(httpRoute.getRoute().equals(request.getLocation()) && httpRoute.getHttpMethod().equals(request.getMethod().toString())) {
+                if(httpRoute.getRoute().equals(request.getLocation()) && httpRoute.getRoute().equals(request.getMethod().toString())) {
                     String controllerClassName = httpRoute.getController().getName();
+                    diEngine.initDependencies(controllerClassName);
                     break;
                 }
             }
@@ -65,14 +67,13 @@ public class ServerThread implements Runnable{
             responseMap.put("route_method", request.getMethod().toString());
             responseMap.put("parameters", request.getParameters());
             Response response = new JsonResponse(responseMap);
-
             out.println(response.render());
 
             in.close();
             out.close();
             socket.close();
 
-        } catch (IOException | RequestNotValidException e) {
+        } catch (IOException | RequestNotValidException | ClassNotFoundException | InvocationTargetException | NoSuchMethodException | InstantiationException | IllegalAccessException e) {
             e.printStackTrace();
         }
     }
@@ -85,9 +86,10 @@ public class ServerThread implements Runnable{
 
         String[] actionRow = command.split(" ");
         Method method = Method.valueOf(actionRow[0]);
-        String route = actionRow[1];
+        String[] splittedRoute = actionRow[1].split("\\?");
+        String route = splittedRoute[0];
         Header header = new Header();
-        HashMap<String, String> parameters = Helper.getParametersFromRoute(route);
+        HashMap<String, String> parameters = Helper.getParametersFromRoute(actionRow[1]);
 
         do {
             command = in.readLine();
@@ -98,19 +100,28 @@ public class ServerThread implements Runnable{
         } while(!command.trim().equals(""));
 
         if(method.equals(Method.POST)) {
-            int contentLength = Integer.parseInt(header.get("content-length"));
+            int contentLength = Integer.parseInt(header.get("Content-Length"));
             char[] buff = new char[contentLength];
             in.read(buff, 0, contentLength);
             String parametersString = new String(buff);
 
-            HashMap<String, String> postParameters = Helper.getParametersFromString(parametersString);
-            for (String parameterName : postParameters.keySet()) {
-                parameters.put(parameterName, postParameters.get(parameterName));
-            }
+            if (buff.length > 0) jsonParser(parametersString, parameters);//promenio parametre u json
+            else parameters = new HashMap<>();
         }
 
         Request request = new Request(method, route, header, parameters);
 
         return request;
+    }
+
+    private void jsonParser(String jsonString, HashMap<String, String> parameters){
+        String []str;
+        str = jsonString.split("\n");
+
+        for (int i = 1; i < str.length-1; i++) {
+            String []paramsCut = (str[i].replaceAll("\"","")).split(":");
+            parameters.put( paramsCut[0],  paramsCut[1]);
+        }
+
     }
 }
