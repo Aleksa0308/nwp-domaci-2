@@ -20,14 +20,12 @@ public class ServerThread implements Runnable{
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
-    private final DiscoveryMechanism discoveryMechanism;
-    private final DIEngine diEngine;
+    private Discovery discoveryMechanism;
+    private DIEngine diEngine;
 
     public ServerThread(Socket socket){
         this.socket = socket;
-
-        //* init discovery mechanism and dependency injection engine
-        discoveryMechanism = DiscoveryMechanism.getInstance();
+        discoveryMechanism = Discovery.getInstance();
         diEngine = DIEngine.getInstance();
 
         try {
@@ -55,12 +53,10 @@ public class ServerThread implements Runnable{
                 return;
             }
 
-            //? init controller dependencies
-            for(HTTPRoute httpRoute : this.discoveryMechanism.getMapOfControllerRoutes()){
-                //? if our server has the route and method the same as in request, init dependencies
-                if(httpRoute.getRoute().equals(request.getLocation()) && httpRoute.getRoute().equals(request.getMethod().toString())) {
-                    String controllerClassName = httpRoute.getController().getName();
-                    diEngine.initDependencies(controllerClassName);
+            for(Route route : this.discoveryMechanism.getRoutesMap()){
+                if(route.getRoute().equals(request.getLocation()) && route.getHttpMethod().equals(request.getMethod().toString())) {
+                    String controllerClassName = route.getController().getName();
+                    diEngine.initialiseDependencies(controllerClassName);
                     break;
                 }
             }
@@ -109,23 +105,14 @@ public class ServerThread implements Runnable{
             in.read(buff, 0, contentLength);
             String parametersString = new String(buff);
 
-            if (buff.length > 0) jsonParser(parametersString, parameters);//promenio parametre u json
-            else parameters = new HashMap<>();
+            HashMap<String, String> postParameters = Helper.getParametersFromString(parametersString);
+            for (String parameterName : postParameters.keySet()) {
+                parameters.put(parameterName, postParameters.get(parameterName));
+            }
         }
 
         Request request = new Request(method, route, header, parameters);
 
         return request;
-    }
-
-    private void jsonParser(String jsonString, HashMap<String, String> parameters){
-        String []str;
-        str = jsonString.split("\n");
-
-        for (int i = 1; i < str.length-1; i++) {
-            String []paramsCut = (str[i].replaceAll("\"","")).split(":");
-            parameters.put( paramsCut[0],  paramsCut[1]);
-        }
-
     }
 }

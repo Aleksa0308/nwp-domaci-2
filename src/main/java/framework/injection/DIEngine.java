@@ -1,70 +1,50 @@
 package framework.injection;
 
-import framework.annotations.*;
 import framework.exceptions.AutowiredException;
 import framework.exceptions.InterfaceQualifierException;
+import framework.injection.annotations.*;
+import testproject.controllers.Controller1;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Objects;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class DIEngine {
-    public static final String ANSI_RESET = "\u001B[0m";
-    public static final String ANSI_PURPLE = "\u001B[35m";
-    public static final String ANSI_YELLOW = "\u001B[33m";
-    public static final String ANSI_BLUE = "\u001B[34m";
-    public static final String ANSI_RED = "\u001B[31m";
 
-
+    private HashMap<String, Object> quasiSingletonInstances;
+    private DependencyContainer dependencyContainer;
     private static DIEngine instance;
-    DependencyContainer dependencyContainer;
-    HashMap<String, Object> singletonsMap;
 
-    private DIEngine(){
-    }
+    private DIEngine(){}
 
     public static DIEngine getInstance(){
         if(instance == null){
             instance = new DIEngine();
-            instance.singletonsMap = new HashMap<>();
+            instance.quasiSingletonInstances = new HashMap<>();
             instance.dependencyContainer = new DependencyContainer();
             instance.dependencyContainer.mapQualifiers();
         }
         return instance;
     }
 
-
-    public Object returnClassInstance(Class cl) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
-        if(singletonsMap.containsKey(cl.getName())) {
-            return singletonsMap.get(cl.getName());
-        }
-        else {
-            Constructor constructor = cl.getDeclaredConstructor();
-            Object obj = constructor.newInstance();
-            singletonsMap.put(obj.getClass().getName(), obj);
-            return obj;
-        }
-    }
-
-    public void initDependencies(String controllerName) throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
-        Class cl = Class.forName(controllerName);
+    public void initialiseDependencies(String controllerClassName) throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
+        Class cl = Class.forName(controllerClassName);
         Object controllerObj = instance.returnClassInstance(cl);
-        instance.singletonsMap.put(controllerObj.getClass().getName(), controllerObj);
+        instance.quasiSingletonInstances.put(controllerObj.getClass().getName(), controllerObj);
+        System.out.println("Hashcode pozvanog kontrolera: " + Objects.requireNonNull(controllerObj).hashCode());
         Field[] controllerFields = cl.getDeclaredFields();
-        controllerInitialisation(controllerObj, controllerFields);
+        recursiveInitialisation(controllerObj, controllerFields);
     }
-    //? Main DI logic
-    //* injection depending on the field type
-    public void controllerInitialisation(Object parentObj, Field[] fields) throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException, ClassNotFoundException {
-        System.out.println(ANSI_PURPLE + "--Recursion--" + ANSI_RESET);
 
-
+    public void recursiveInitialisation(Object parentObj, Field[] fields) throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException, ClassNotFoundException {
+        System.out.println("POZIV REKURZIVNE INICIJALIZACIJE");
         for(Field field : fields){
-            System.out.println(ANSI_YELLOW + "Field: " + ANSI_RESET + ANSI_BLUE + field + ANSI_RESET);
+            System.out.println("POLJE: " + field);
 
             if(field.isAnnotationPresent(Autowired.class)){
                 Object obj = null;
@@ -73,18 +53,14 @@ public class DIEngine {
 
                 if(field.getType().isInterface()){
                     Qualifier qualifier = field.getAnnotation(Qualifier.class);
-
                     if(qualifier != null){
                         cl = instance.dependencyContainer.returnImplementation(qualifier.value());
-                    }
-                    else try {
-                        throw new InterfaceQualifierException("Qualifier annotation missing from interface");
-                    }
-                    catch (InterfaceQualifierException e) {
+                    } else try {
+                        throw new InterfaceQualifierException("An interface attribute is missing a @Qualifier annotation.");
+                    } catch (InterfaceQualifierException e) {
                         e.printStackTrace();
                     }
-                }
-                else {
+                } else {
                     String[] str = field.toString().split(" ");
                     cl = Class.forName(str[1]);
                 }
@@ -92,38 +68,40 @@ public class DIEngine {
 
                 if(cl.isAnnotationPresent(Bean.class)){
                     Bean bean = (Bean) cl.getAnnotation(Bean.class);
-                    if(bean.scope().equals("singleton"))
+                    if(bean.scope().equals("singleton")){
                         obj = instance.returnClassInstance(cl);
-                    else if(bean.scope().equals("prototype"))
+                        instance.quasiSingletonInstances.put(obj.getClass().getName(), obj);
+                    } else if(bean.scope().equals("prototype"))
                         obj = constructor.newInstance();
-                }
-
-                else if (cl.isAnnotationPresent(Service.class))
+                } else if (cl.isAnnotationPresent(Service.class)){
                     obj = instance.returnClassInstance(cl);
-
-                else if (cl.isAnnotationPresent(Component.class))
+                    instance.quasiSingletonInstances.put(obj.getClass().getName(), obj);
+                } else if (cl.isAnnotationPresent(Component.class)){
                     obj = constructor.newInstance();
-
-                else try {
-                        throw new AutowiredException("Missing other annotations next to autowired");
-                    }
-                    catch (AutowiredException e) {
-                        e.printStackTrace();
-                    }
+                } else try {
+                    throw new AutowiredException("The @Autowired annotation is used on an invalid attribute.");
+                } catch (AutowiredException e) {
+                    e.printStackTrace();
+                }
                 field.setAccessible(true);
                 field.set(parentObj, obj);
-
                 Autowired autowired = field.getAnnotation(Autowired.class);
                 if(autowired.verbose()){
-                    System.out.println("[Initialized " + field.getType() + " " + field.getName() + " in " + parentObj.getClass().getName() +
-                            " on " + LocalDateTime.now() + " with hash code " + Objects.requireNonNull(obj).hashCode() + "]" + ANSI_RED + " verbose " + ANSI_RESET );
+                    System.out.println("Initialized " + field.getType() + " " + field.getName() + " in " + parentObj.getClass().getName() + " on "
+                            + LocalDateTime.now() + " with hash code " + Objects.requireNonNull(obj).hashCode());
                 }
-
-                controllerInitialisation(obj, cl.getDeclaredFields());
+                recursiveInitialisation(obj, cl.getDeclaredFields());
             }
         }
     }
 
-
+    public Object returnClassInstance(Class cl) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
+        if(quasiSingletonInstances.containsKey(cl.getName()))
+            return quasiSingletonInstances.get(cl.getName());
+        else {
+            Constructor constructor = cl.getDeclaredConstructor();
+            return constructor.newInstance();
+        }
+    }
 
 }
