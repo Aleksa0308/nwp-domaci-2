@@ -41,6 +41,7 @@ public class DIEngine {
         recursiveInitialisation(controllerObj, controllerFields);
     }
 
+    //? Main Logic For Dependency Injection
     public void recursiveInitialisation(Object parentObj, Field[] fields) throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException, ClassNotFoundException {
         System.out.println("POZIV REKURZIVNE INICIJALIZACIJE");
         for(Field field : fields){
@@ -51,6 +52,7 @@ public class DIEngine {
                 Class cl = null;
                 Constructor constructor;
 
+                //* Qualifier
                 if(field.getType().isInterface()){
                     Qualifier qualifier = field.getAnnotation(Qualifier.class);
                     if(qualifier != null){
@@ -64,19 +66,24 @@ public class DIEngine {
                     String[] str = field.toString().split(" ");
                     cl = Class.forName(str[1]);
                 }
+
+                //? to create new instace if scope is prototype
                 constructor = Objects.requireNonNull(cl).getDeclaredConstructor();
 
+                //! Bean
                 if(cl.isAnnotationPresent(Bean.class)){
                     Bean bean = (Bean) cl.getAnnotation(Bean.class);
                     if(bean.scope().equals("singleton")){
+                        //? call already created instance
                         obj = instance.returnClassInstance(cl);
                         instance.quasiSingletonInstances.put(obj.getClass().getName(), obj);
                     } else if(bean.scope().equals("prototype"))
+                        //? create new instance
                         obj = constructor.newInstance();
-                } else if (cl.isAnnotationPresent(Service.class)){
+                } else if (cl.isAnnotationPresent(Service.class)){ //! Service
                     obj = instance.returnClassInstance(cl);
                     instance.quasiSingletonInstances.put(obj.getClass().getName(), obj);
-                } else if (cl.isAnnotationPresent(Component.class)){
+                } else if (cl.isAnnotationPresent(Component.class)){ //! Component
                     obj = constructor.newInstance();
                 } else try {
                     throw new AutowiredException("The @Autowired annotation is used on an invalid attribute.");
@@ -85,7 +92,9 @@ public class DIEngine {
                 }
                 field.setAccessible(true);
                 field.set(parentObj, obj);
+                //! Autowired
                 Autowired autowired = field.getAnnotation(Autowired.class);
+                //? print if verbose is true
                 if(autowired.verbose()){
                     System.out.println("Initialized " + field.getType() + " " + field.getName() + " in " + parentObj.getClass().getName() + " on "
                             + LocalDateTime.now() + " with hash code " + Objects.requireNonNull(obj).hashCode());
