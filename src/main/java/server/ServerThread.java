@@ -25,6 +25,8 @@ public class ServerThread implements Runnable{
 
     public ServerThread(Socket socket){
         this.socket = socket;
+
+        //* init discovery mechanism and dependency injection engine
         discoveryMechanism = DiscoveryMechanism.getInstance();
         diEngine = DIEngine.getInstance();
 
@@ -53,7 +55,9 @@ public class ServerThread implements Runnable{
                 return;
             }
 
+            //? init controller dependencies
             for(HTTPRoute httpRoute : this.discoveryMechanism.getMapOfControllerRoutes()){
+                //? if our server has the route and method the same as in request, init dependencies
                 if(httpRoute.getRoute().equals(request.getLocation()) && httpRoute.getRoute().equals(request.getMethod().toString())) {
                     String controllerClassName = httpRoute.getController().getName();
                     diEngine.initDependencies(controllerClassName);

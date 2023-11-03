@@ -18,9 +18,9 @@ public class ControllerX {
 
     @Path(path = "/methodX1")
     @Get
-    public void methodA1(){}
+    public void methodX1(){}
 
     @Path(path = "/methodX2")
     @Post
-    public void methodA2(){}
+    public void methodX2(){}
 }

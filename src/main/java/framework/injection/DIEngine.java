@@ -57,7 +57,8 @@ public class DIEngine {
         Field[] controllerFields = cl.getDeclaredFields();
         controllerInitialisation(controllerObj, controllerFields);
     }
-
+    //? Main DI logic
+    //* injection depending on the field type
     public void controllerInitialisation(Object parentObj, Field[] fields) throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException, ClassNotFoundException {
         System.out.println(ANSI_PURPLE + "--Recursion--" + ANSI_RESET);
 
